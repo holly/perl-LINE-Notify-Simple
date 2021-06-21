@@ -9,14 +9,13 @@ use JSON;
 use Encode;
 use Encode::Guess qw(euc-jp shiftjis 7bit-jis);
 use LWP::UserAgent;
-use HTTP::Request;
-use URI::Escape;
+use HTTP::Request::Common;
 use LINE::Notify::Simple::Response;
 
 __PACKAGE__->mk_accessors(qw(access_token));
 
 our $LINE_NOTIFY_URL    = 'https://notify-api.line.me/api/notify';
-our $VERSION            = '1.01';
+our $VERSION            = '1.02';
 
 sub notify {
 
@@ -30,15 +29,26 @@ sub notify_detail {
 
 	my($self, $data) = @_;
 
-	my $headers = [
-			'Content-Type', 'application/x-www-form-urlencoded',
-			'Authorization', sprintf('Bearer %s', $self->access_token)
-		];
+	my %headers = (
+			'Authorization' => sprintf('Bearer %s', $self->access_token)
+		);
 
-	my $content = $self->make_query($data);
+	# drop utf8 flag
+	$self->_drop_utf8_flag_hashref($data);
+
+	if (exists $data->{imageFile}) {
+		my $image_file = ref($data->{imageFile}) eq "ARRAY" ? $data->{imageFile}->[0] : $data->{imageFile};
+		if (!-e $image_file) {
+			die "$image_file is not exists.";
+		}
+		$data->{imageFile} = [$image_file];
+		$headers{'Content-type'} = "form-data";
+	} else {
+		$headers{'Content-type'} = "application/x-www-form-urlencoded";
+	}
 
 	my $ua  = LWP::UserAgent->new;
-	my $req = HTTP::Request->new("POST", $LINE_NOTIFY_URL, $headers, $content);
+	my $req = POST $LINE_NOTIFY_URL, %headers, Content => [%{$data}];
 	my $res = $ua->request($req);
 
 	my $rate_limit_headers = {};
@@ -54,23 +64,21 @@ sub notify_detail {
 	return LINE::Notify::Simple::Response->new({ rate_limit_headers => $rate_limit_headers, status => $ref->{status}, message => $ref->{message}, status_line => $res->status_line });
 }
 
-
-sub make_query {
+sub _drop_utf8_flag_hashref {
 
 	my($self, $data) = @_;
 
-	my @pairs;
-	foreach my $key(keys %{$data}) {
-
+	foreach my $key (keys %{$data}) {
 		my $val = $data->{$key};
+		if (ref($val)) {
+			next;
+		}
 		if (utf8::is_utf8($val)) {
 			my $enc   = guess_encoding($val);
 			my $guess = ref($enc) ? $enc->name : "UTF-8";
-			$val = Encode::encode($guess, $val);
+			$data->{$key} = encode($guess, $val);
 		}
-		push @pairs, sprintf("%s=%s", $key, uri_escape($val));
 	}
-	return join("&", @pairs);
 }
 
 1;
@@ -85,7 +93,7 @@ LINE::Notify::Simple
 
 =head1 VERSION
 
-1.01
+1.02
 
 =head1 SYNOPSIS
 
@@ -139,7 +147,7 @@ message(required)
 
 =head2 notify_detail
 
-Hashref keys are message, stickerPackageId, stickerId, notificationDisabled
+Hashref keys are message, imageThumbnail, imageFullsize, imageFile, stickerPackageId, stickerId and notificationDisabled
 
   # see https://developers.line.biz/ja/docs/messaging-api/sticker-list/
   my $data = {
@@ -153,6 +161,15 @@ Hashref keys are message, stickerPackageId, stickerId, notificationDisabled
   } else {
       say $res->status_line . ". ". $res->message;
   }
+
+Using imageFile
+
+  my $data = {
+      message   => "\nThis is test message.",
+      imageFile => "/path/to/image.png"
+  };
+  my $res = $line->notify_detail($data);
+
 
 =over 4
 
@@ -174,11 +191,15 @@ notificationDisabled(optional).
 
 =item *
 
-imageThumbnail(not supported)
+imageThumbnail(optional)
 
 =item *
 
-imageFullsize(not supported)
+imageFullsize(optional)
+
+=item *
+
+imageFile(optional). file type is must be png or jpg
 
 =back
 
