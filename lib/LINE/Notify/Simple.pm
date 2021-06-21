@@ -16,22 +16,25 @@ use LINE::Notify::Simple::Response;
 __PACKAGE__->mk_accessors(qw(access_token));
 
 our $LINE_NOTIFY_URL    = 'https://notify-api.line.me/api/notify';
-our $VERSION            = '1.0';
+our $VERSION            = '1.01';
 
 sub notify {
 
-	my($self, $message, $data) = @_;
+	my($self, $message) = @_;
+
+	my $data = { message => $message };
+	return $self->notify_detail($data);
+}
+
+sub notify_detail {
+
+	my($self, $data) = @_;
 
 	my $headers = [
 			'Content-Type', 'application/x-www-form-urlencoded',
 			'Authorization', sprintf('Bearer %s', $self->access_token)
 		];
 
-	if (ref($data) eq "HASH") {
-		$data->{message} = $message;
-	} else {
-		$data = { message => $message };
-	}
 	my $content = $self->make_query($data);
 
 	my $ua  = LWP::UserAgent->new;
@@ -82,7 +85,7 @@ LINE::Notify::Simple
 
 =head1 VERSION
 
-1.0
+1.01
 
 =head1 SYNOPSIS
 
@@ -96,12 +99,9 @@ LINE::Notify::Simple
   
   my $access_token = 'your line access token';
   my $message = "\nThis is test message.";
-  # see https://developers.line.biz/ja/docs/messaging-api/sticker-list/
-  my $data = { stickerPackageId => 11539, stickerId => 52114110 };
-  
   my $line = LINE::Notify->new({access_token => $access_token});
   
-  my $res = $line->notify($message, $data);
+  my $res = $line->notify($message);
   if ($res->is_success) {
       say $res->message;
   } else {
@@ -121,15 +121,64 @@ L<LINE Notify API|https://notify-api.line.me/api/notify> simple & easy POST requ
 POST https://notify-api.line.me/api/notify.
 Return LINE::Notify::Simple::Response.
 
+  my $message = "\nThis is test message.";
+  my $res = $line->notify($message);
+  if ($res->is_success) {
+      say $res->message;
+  } else {
+      say $res->status_line . ". ". $res->message;
+  }
+
 =over
 
-=item $message
+=item *
 
-Post message(require)
+message(required)
 
-=item $data
+=back
 
-Optional hashref. keys are imageThumbnail, imageFullsize, stickerPackageId, stickerId, notificationDisabled
+=head2 notify_detail
+
+Hashref keys are message, stickerPackageId, stickerId, notificationDisabled
+
+  # see https://developers.line.biz/ja/docs/messaging-api/sticker-list/
+  my $data = {
+      message          => "\nThis is test message.",
+      stickerPackageId => 11539,
+      stickerId        => 52114110
+  };
+  my $res = $line->notify_detail($data);
+  if ($res->is_success) {
+      say $res->message;
+  } else {
+      say $res->status_line . ". ". $res->message;
+  }
+
+=over 4
+
+=item *
+
+message(required)
+
+=item *
+
+stickerPackageId(optional)
+
+=item *
+
+stickerId(optional)
+
+=item *
+
+notificationDisabled(optional).
+
+=item *
+
+imageThumbnail(not supported)
+
+=item *
+
+imageFullsize(not supported)
 
 =back
 

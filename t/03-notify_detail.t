@@ -13,8 +13,15 @@ require_ok( 'LINE::Notify::Simple' ) || print "Bail out!\n";
 
 my $access_token = $ENV{LINE_ACCESS_TOKEN};
 my $line = LINE::Notify::Simple->new({ access_token => $access_token });
-my $res = $line->notify("valid token response test");
 
-ok($res->is_success == 1, "valid token response test");
+my $data = {
+      message          => "\nvalid token and notify_detail method test.",
+      stickerPackageId => 11539,
+      stickerId        => 52114110
+};
+
+my $res = $line->notify_detail($data);
+
+ok($res->is_success == 1, "valid token and notify_detail method test");
 
 done_testing;
